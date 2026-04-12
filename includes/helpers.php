@@ -35,7 +35,7 @@ function statusLabel(bool $hasPhoto): string //statusClass() et statusLabel() po
 {
     return $hasPhoto ? 'Publié' : 'Brouillon';
 }
- Pour éviter de réécrire du code partout et pour centraliser la sécurité.
+// Pour éviter de réécrire du code partout et pour centraliser la sécurité.
 /**
  * Formate un prix pour l'affichage en FCFA.
  */
@@ -50,3 +50,4 @@ function formatPrice($value): string // formatPrice() pour formater un nombre en
     }
     return number_format($number, 0, ',', ' ') . ' FCFA';
 }
+?>
