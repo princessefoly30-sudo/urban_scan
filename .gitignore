@@ -1,3 +1,4 @@
 /vendor
 .DS_Store
 connexion.php (si ce fichier contient tes mots de passe de base de données en clair)
+config/db.php
