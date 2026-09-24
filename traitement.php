@@ -1,27 +1,25 @@
-﻿<?php
+<?php
 /**
  * URBAN SCAN BÉNIN - LOGIQUE BACK-END
+ *
+ * Ce fichier écrit et supprime en base. Il est donc réservé aux personnes
+ * connectées, et chaque requête doit porter le jeton CSRF de la session.
  */
-require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/auth.php';
 
-// --- SUPPRESSION ---
-if (isset($_GET['action'], $_GET['id']) && $_GET['action'] === 'delete') {
-    try {
-        $id = (int) $_GET['id'];
-        $stmt = $pdo->prepare('SELECT photo_maison FROM maison WHERE id_maison = ?');
-        $stmt->execute([$id]);
-        $result = $stmt->fetch();
-        if ($result && !empty($result['photo_maison']) && file_exists($result['photo_maison'])) {
-            @unlink($result['photo_maison']);
-        }
+// Le contrôle d'accès passe avant le chargement de la base : une visiteuse
+// non connectée ne doit pas même ouvrir une connexion MySQL.
+requireLogin();
 
-        $delete = $pdo->prepare('DELETE FROM maison WHERE id_maison = ?');
-        $delete->execute([$id]);
+const UPLOAD_DIR = 'uploads/residences';
 
-        header('Location: liste.php?msg=deleted');
-        exit;
-    } catch (Exception $e) {
-        die('Erreur lors de la suppression : ' . $e->getMessage());
+/**
+ * Supprime un fichier uniquement s'il se trouve dans le dossier des photos.
+ */
+function deleteStoredPhoto(?string $relativePath): void
+{
+    if ($relativePath && pathIsInside($relativePath, UPLOAD_DIR)) {
+        @unlink(__DIR__ . '/' . $relativePath);
     }
 }
 
@@ -30,35 +28,84 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-try {
-    $id_maison = !empty($_POST['id_maison']) ? (int) $_POST['id_maison'] : null;
-    $id_proprio = !empty($_POST['id_proprio']) ? (int) $_POST['id_proprio'] : null;
+requireCsrf($_POST['csrf_token'] ?? null);
 
-    $nom_complet = trim($_POST['nom_complet'] ?? '');
-    $profession = trim($_POST['profession'] ?? '');
-    $nom_residence = trim($_POST['nom_residence'] ?? '');
-    $id_ville = !empty($_POST['id_ville']) ? (int) $_POST['id_ville'] : null;
-    $style_arch = trim($_POST['style_arch'] ?? '') ?: 'Moderne';
-    $prixRaw = trim($_POST['prix'] ?? '');
-    $prix = $prixRaw !== '' ? str_replace(',', '.', preg_replace('/[^0-9\,\.]/', '', $prixRaw)) : null;
-    $image_path = trim($_POST['ancienne_photo'] ?? '');
+// La base n'est ouverte qu'une fois la requête reconnue comme légitime.
+require_once __DIR__ . '/config/db.php';
 
-    if (isset($_FILES['photo_maison']) && $_FILES['photo_maison']['error'] === UPLOAD_ERR_OK) {
-        $upload_dir = __DIR__ . '/uploads/residences/';
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0777, true);
+// --- SUPPRESSION ---
+// En POST et non plus en GET : un lien visité par erreur ne doit pas effacer
+// une fiche, et les navigateurs préchargent parfois les liens.
+if (($_POST['action'] ?? '') === 'delete') {
+    try {
+        $id = (int) ($_POST['id'] ?? 0);
+        $stmt = $pdo->prepare('SELECT photo_maison FROM maison WHERE id_maison = ?');
+        $stmt->execute([$id]);
+        $result = $stmt->fetch();
+        if ($result) {
+            deleteStoredPhoto($result['photo_maison'] ?? null);
         }
 
-        $extension = strtolower(pathinfo($_FILES['photo_maison']['name'], PATHINFO_EXTENSION));
-        $allowed = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-        if (in_array($extension, $allowed, true)) {
+        $delete = $pdo->prepare('DELETE FROM maison WHERE id_maison = ?');
+        $delete->execute([$id]);
+
+        header('Location: liste.php?msg=deleted');
+        exit;
+    } catch (Exception $e) {
+        error_log('Suppression impossible : ' . $e->getMessage());
+        header('Location: liste.php?msg=error');
+        exit;
+    }
+}
+
+try {
+    $id_maison  = !empty($_POST['id_maison']) ? (int) $_POST['id_maison'] : null;
+    $id_proprio = !empty($_POST['id_proprio']) ? (int) $_POST['id_proprio'] : null;
+
+    $nom_complet    = trim($_POST['nom_complet'] ?? '');
+    $profession     = trim($_POST['profession'] ?? '');
+    $nom_residence  = trim($_POST['nom_residence'] ?? '');
+    $id_ville       = !empty($_POST['id_ville']) ? (int) $_POST['id_ville'] : null;
+    $style_arch     = trim($_POST['style_arch'] ?? '') ?: 'Moderne';
+    $prixRaw        = trim($_POST['prix'] ?? '');
+    $prix           = $prixRaw !== '' ? str_replace(',', '.', preg_replace('/[^0-9\,\.]/', '', $prixRaw)) : null;
+
+    // Le chemin de l'ancienne photo vient du formulaire : on ne le garde que
+    // s'il désigne bien un fichier du dossier des photos.
+    $ancienne_photo = trim($_POST['ancienne_photo'] ?? '');
+    $image_path = pathIsInside($ancienne_photo, UPLOAD_DIR) ? $ancienne_photo : '';
+
+    if (isset($_FILES['photo_maison']) && $_FILES['photo_maison']['error'] === UPLOAD_ERR_OK) {
+        $upload_dir = __DIR__ . '/' . UPLOAD_DIR . '/';
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0755, true);
+        }
+
+        $maxBytes = 5 * 1024 * 1024;
+        if ($_FILES['photo_maison']['size'] > $maxBytes) {
+            header('Location: index.php?msg=too_large');
+            exit;
+        }
+
+        // On ne fait pas confiance à l'extension envoyée : getimagesize() lit
+        // le début du fichier et échoue si ce n'est pas une vraie image.
+        $imageInfo = @getimagesize($_FILES['photo_maison']['tmp_name']);
+        $allowed = [
+            IMAGETYPE_JPEG => 'jpg',
+            IMAGETYPE_PNG  => 'png',
+            IMAGETYPE_WEBP => 'webp',
+            IMAGETYPE_GIF  => 'gif',
+        ];
+
+        if ($imageInfo !== false && isset($allowed[$imageInfo[2]])) {
+            $extension = $allowed[$imageInfo[2]];
             $filename = 'urban_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
             $destination = $upload_dir . $filename;
             if (move_uploaded_file($_FILES['photo_maison']['tmp_name'], $destination)) {
-                if ($id_maison && !empty($image_path) && file_exists($image_path)) {
-                    @unlink($image_path);
+                if ($id_maison) {
+                    deleteStoredPhoto($image_path);
                 }
-                $image_path = 'uploads/residences/' . $filename;
+                $image_path = UPLOAD_DIR . '/' . $filename;
             }
         }
     }
@@ -96,5 +143,9 @@ try {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
-    die('Erreur de traitement : ' . $e->getMessage());
+    // Le détail reste dans les logs : un message d'erreur SQL renvoyé au
+    // visiteur décrit la structure de la base à qui veut l'attaquer.
+    error_log('Traitement impossible : ' . $e->getMessage());
+    header('Location: index.php?msg=error');
+    exit;
 }

@@ -1,6 +1,7 @@
 ﻿<?php
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/auth.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -82,6 +83,7 @@ $previewSrc = $villa['photo_maison'] ?? '';
                 </div>
 
                 <form action="traitement.php" method="POST" enctype="multipart/form-data" id="multistep-form">
+                    <input type="hidden" name="csrf_token" value="<?= escape(csrfToken()) ?>">
                     <input type="hidden" name="id_maison" value="<?= $villa['id_maison'] ?? '' ?>">
                     <input type="hidden" name="id_proprio" value="<?= $villa['id_proprio'] ?? '' ?>">
                     <input type="hidden" name="ancienne_photo" value="<?= htmlspecialchars($villa['photo_maison'] ?? '') ?>">

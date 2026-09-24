@@ -1,4 +1,9 @@
+# Configuration locale, jamais versionnée : elle contient les identifiants.
+config/db.php
+config/auth.php
+
+# Dépendances et fichiers système
 /vendor
 .DS_Store
-connexion.php (si ce fichier contient tes mots de passe de base de données en clair)
-config/db.php
+Thumbs.db
+*.log

@@ -2,6 +2,7 @@
 /**
  * URBAN SCAN BÉNIN - DASHBOARD ADMIN PRO
  */
+require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/helpers.php';
 
@@ -154,7 +155,12 @@ $pageActionUrl = '#';
                                 </div>
                                 <div class="card-actions">
                                     <a href="index.php?edit=<?= $row['id_maison'] ?>" class="btn btn-edit"><i class="fa-solid fa-pen-to-square"></i> Éditer</a>
-                                    <a href="traitement.php?action=delete&id=<?= $row['id_maison'] ?>" class="btn btn-delete" onclick="return confirm('Attention : Cette action est irréversible. Confirmer ?')"><i class="fa-solid fa-trash-can"></i> Supprimer</a>
+                                    <form action="traitement.php" method="POST" onsubmit="return confirm('Attention : Cette action est irréversible. Confirmer ?')" style="display:inline;">
+                                        <input type="hidden" name="csrf_token" value="<?= escape(csrfToken()) ?>">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="id" value="<?= (int) $row['id_maison'] ?>">
+                                        <button type="submit" class="btn btn-delete"><i class="fa-solid fa-trash-can"></i> Supprimer</button>
+                                    </form>
                                 </div>
                             </div>
                         </article>

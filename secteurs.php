@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/config/db.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -39,6 +40,7 @@ $villes = $pdo->query('SELECT * FROM ville ORDER BY nom_ville ASC')->fetchAll();
                     </div>
                 </div>
                 <form action="traitement_ville.php" method="POST">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrfToken(), ENT_QUOTES, 'UTF-8') ?>">
                     <div class="input-group">
                         <label for="nom_ville">Nom de la ville</label>
                         <input id="nom_ville" name="nom_ville" class="input-field" type="text" placeholder="Cotonou" required>
